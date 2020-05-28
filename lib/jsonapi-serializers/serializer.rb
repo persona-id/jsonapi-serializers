@@ -72,13 +72,11 @@ module JSONAPI
 
       # Override this to provide resource-object jsonapi object containing the version in use.
       # http://jsonapi.org/format/#document-jsonapi-object
-      def jsonapi
-      end
+      def jsonapi; end
 
       # Override this to provide resource-object metadata.
       # http://jsonapi.org/format/#document-structure-resource-objects
-      def meta
-      end
+      def meta; end
 
       # Override this to set a base URL (http://example.com) for all links. No trailing slash.
       def base_url
@@ -119,20 +117,20 @@ module JSONAPI
             data[formatted_attribute_name]['links']['related'] = links_related if links_related
           end
 
-          if @_include_linkages.include?(formatted_attribute_name) || attr_data[:options][:include_data]
-            object = has_one_relationship(attribute_name, attr_data)
-            if object.nil?
-              # Spec: Resource linkage MUST be represented as one of the following:
-              # - null for empty to-one relationships.
-              # http://jsonapi.org/format/#document-structure-resource-relationships
-              data[formatted_attribute_name]['data'] = nil
-            else
-              related_object_serializer = JSONAPI::Serializer.find_serializer(object, @options)
-              data[formatted_attribute_name]['data'] = {
-                'type' => related_object_serializer.type.to_s,
-                'id' => related_object_serializer.id.to_s,
-              }
-            end
+          next unless @_include_linkages.include?(formatted_attribute_name) || attr_data[:options][:include_data]
+
+          object = has_one_relationship(attribute_name, attr_data)
+          if object.nil?
+            # Spec: Resource linkage MUST be represented as one of the following:
+            # - null for empty to-one relationships.
+            # http://jsonapi.org/format/#document-structure-resource-relationships
+            data[formatted_attribute_name]['data'] = nil
+          else
+            related_object_serializer = JSONAPI::Serializer.find_serializer(object, @options)
+            data[formatted_attribute_name]['data'] = {
+              'type' => related_object_serializer.type.to_s,
+              'id' => related_object_serializer.id.to_s
+            }
           end
         end
 
@@ -154,16 +152,16 @@ module JSONAPI
           # - an empty array ([]) for empty to-many relationships.
           # - an array of linkage objects for non-empty to-many relationships.
           # http://jsonapi.org/format/#document-structure-resource-relationships
-          if @_include_linkages.include?(formatted_attribute_name) || attr_data[:options][:include_data]
-            data[formatted_attribute_name]['data'] = []
-            objects = has_many_relationship(attribute_name, attr_data) || []
-            objects.each do |obj|
-              related_object_serializer = JSONAPI::Serializer.find_serializer(obj, @options)
-              data[formatted_attribute_name]['data'] << {
-                'type' => related_object_serializer.type.to_s,
-                'id' => related_object_serializer.id.to_s,
-              }
-            end
+          next unless @_include_linkages.include?(formatted_attribute_name) || attr_data[:options][:include_data]
+
+          data[formatted_attribute_name]['data'] = []
+          objects = has_many_relationship(attribute_name, attr_data) || []
+          objects.each do |obj|
+            related_object_serializer = JSONAPI::Serializer.find_serializer(obj, @options)
+            data[formatted_attribute_name]['data'] << {
+              'type' => related_object_serializer.type.to_s,
+              'id' => related_object_serializer.id.to_s
+            }
           end
         end
         data
@@ -171,9 +169,11 @@ module JSONAPI
 
       def attributes
         return {} if self.class.attributes_map.nil?
+
         attributes = {}
         self.class.attributes_map.each do |attribute_name, attr_data|
-          next if !should_include_attr?(attribute_name, attr_data)
+          next unless should_include_attr?(attribute_name, attr_data)
+
           value = evaluate_attr_or_block(attribute_name, attr_data[:attr_or_block])
           attributes[format_name(attribute_name)] = value
         end
@@ -182,9 +182,11 @@ module JSONAPI
 
       def has_one_relationships
         return {} if self.class.to_one_associations.nil?
+
         data = {}
         self.class.to_one_associations.each do |attribute_name, attr_data|
-          next if !should_include_attr?(attribute_name, attr_data)
+          next unless should_include_attr?(attribute_name, attr_data)
+
           data[attribute_name] = attr_data
         end
         data
@@ -196,9 +198,11 @@ module JSONAPI
 
       def has_many_relationships
         return {} if self.class.to_many_associations.nil?
+
         data = {}
         self.class.to_many_associations.each do |attribute_name, attr_data|
-          next if !should_include_attr?(attribute_name, attr_data)
+          next unless should_include_attr?(attribute_name, attr_data)
+
           data[attribute_name] = attr_data
         end
         data
@@ -221,7 +225,7 @@ module JSONAPI
       end
       protected :should_include_attr?
 
-      def evaluate_attr_or_block(attribute_name, attr_or_block)
+      def evaluate_attr_or_block(_attribute_name, attr_or_block)
         if attr_or_block.is_a?(Proc)
           # A custom block was given, call it to get the value.
           instance_eval(&attr_or_block)
@@ -234,12 +238,13 @@ module JSONAPI
     end
 
     def self.find_serializer_class_name(object, options)
-      if options[:namespace]
-        return "#{options[:namespace]}::#{object.class.name}Serializer"
-      end
       if object.respond_to?(:jsonapi_serializer_class_name)
         return object.jsonapi_serializer_class_name.to_s
       end
+      if options[:namespace]
+        return "#{options[:namespace]}::#{object.class.name}Serializer"
+      end
+
       "#{object.class.name}Serializer"
     end
 
@@ -298,8 +303,7 @@ module JSONAPI
       }
 
       if !options[:skip_collection_check] && options[:is_collection] && !objects.respond_to?(:each)
-        raise JSONAPI::Serializer::AmbiguousCollectionError.new(
-          'Attempted to serialize a single object as a collection.')
+        raise JSONAPI::Serializer::AmbiguousCollectionError, 'Attempted to serialize a single object as a collection.'
       end
 
       # Automatically include linkage data for any relation that is also included.
@@ -312,7 +316,7 @@ module JSONAPI
       # - a single resource object or null, for requests that target single resources.
       # - an array of resource objects or an empty array ([]), for resource collections.
       # http://jsonapi.org/format/#document-structure-top-level
-      if options[:is_collection] && !objects.any?
+      if options[:is_collection] && objects.none?
         primary_data = []
       elsif !options[:is_collection] && objects.nil?
         primary_data = nil
@@ -324,14 +328,14 @@ module JSONAPI
         # We always must be told if serializing a collection because the JSON:API spec distinguishes
         # how to serialize null single resources vs. empty collections.
         if !options[:skip_collection_check] && objects.respond_to?(:each)
-          raise JSONAPI::Serializer::AmbiguousCollectionError.new(
-            'Must provide `is_collection: true` to `serialize` when serializing collections.')
+          raise JSONAPI::Serializer::AmbiguousCollectionError, 'Must provide `is_collection: true` to `serialize` when serializing collections.'
         end
+
         # Have single object.
         primary_data = serialize_primary(objects, passthrough_options)
       end
       result = {
-        'data' => primary_data,
+        'data' => primary_data
       }
       result['jsonapi'] = options[:jsonapi] if options[:jsonapi]
       result['meta'] = options[:meta] if options[:meta]
@@ -368,9 +372,9 @@ module JSONAPI
 
     def self.serialize_errors(raw_errors)
       if is_activemodel_errors?(raw_errors)
-        {'errors' => activemodel_errors(raw_errors)}
+        { 'errors' => activemodel_errors(raw_errors) }
       else
-        {'errors' => raw_errors}
+        { 'errors' => raw_errors }
       end
     end
 
@@ -403,7 +407,7 @@ module JSONAPI
 
       serializer = serializer_class.new(object, options)
       data = {
-        'type' => serializer.type.to_s,
+        'type' => serializer.type.to_s
       }
 
       # "The id member is not required when the resource object originates at the client
@@ -420,11 +424,11 @@ module JSONAPI
       relationships = serializer.relationships
       jsonapi = serializer.jsonapi
       meta = serializer.meta
-      data['attributes'] = attributes if !attributes.empty?
-      data['links'] = links if !links.empty?
-      data['relationships'] = relationships if !relationships.empty?
-      data['jsonapi'] = jsonapi if !jsonapi.nil?
-      data['meta'] = meta if !meta.nil?
+      data['attributes'] = attributes unless attributes.empty?
+      data['links'] = links unless links.empty?
+      data['relationships'] = relationships unless relationships.empty?
+      data['jsonapi'] = jsonapi unless jsonapi.nil?
+      data['meta'] = meta unless meta.nil?
       data
     end
     class << self; protected :serialize_primary; end
@@ -433,7 +437,7 @@ module JSONAPI
       # Spec: Primary data MUST be either:
       # - an array of resource objects or an empty array ([]), for resource collections.
       # http://jsonapi.org/format/#document-structure-top-level
-      return [] if !objects.any?
+      return [] if objects.none?
 
       objects.map { |obj| serialize_primary(obj, options) }
     end
@@ -459,28 +463,25 @@ module JSONAPI
         object = nil
         is_collection = false
         is_valid_attr = false
-        if serializer.has_one_relationships.has_key?(unformatted_attr_name)
+        if serializer.has_one_relationships.key?(unformatted_attr_name)
           is_valid_attr = true
           attr_data = serializer.has_one_relationships[unformatted_attr_name]
           object = serializer.has_one_relationship(unformatted_attr_name, attr_data)
-        elsif serializer.has_many_relationships.has_key?(unformatted_attr_name)
+        elsif serializer.has_many_relationships.key?(unformatted_attr_name)
           is_valid_attr = true
           is_collection = true
           attr_data = serializer.has_many_relationships[unformatted_attr_name]
           object = serializer.has_many_relationship(unformatted_attr_name, attr_data)
         end
 
-        if !is_valid_attr
-          raise JSONAPI::Serializer::InvalidIncludeError.new(
-            "'#{attribute_name}' is not a valid include.")
+        unless is_valid_attr
+          raise JSONAPI::Serializer::InvalidIncludeError, "'#{attribute_name}' is not a valid include."
         end
 
         if attribute_name != serializer.format_name(attribute_name)
           expected_name = serializer.format_name(attribute_name)
 
-          raise JSONAPI::Serializer::InvalidIncludeError.new(
-            "'#{attribute_name}' is not a valid include.  Did you mean '#{expected_name}' ?"
-          )
+          raise JSONAPI::Serializer::InvalidIncludeError, "'#{attribute_name}' is not a valid include.  Did you mean '#{expected_name}' ?"
         end
 
         # We're finding relationships for compound documents, so skip anything that doesn't exist.
@@ -520,16 +521,16 @@ module JSONAPI
             # so merge the include_linkages each time we see it to load all the relevant linkages.
             current_child_includes += results[key] && results[key][:include_linkages] || []
             current_child_includes.uniq!
-            results[key] = {object: obj, include_linkages: current_child_includes}
+            results[key] = { object: obj, include_linkages: current_child_includes }
           end
         end
 
         # Recurse deeper!
-        if !child_inclusion_tree.empty?
-          # For each object we just loaded, find all deeper recursive relationships.
-          objects.each do |obj|
-            find_recursive_relationships(obj, child_inclusion_tree, results, options)
-          end
+        next if child_inclusion_tree.empty?
+
+        # For each object we just loaded, find all deeper recursive relationships.
+        objects.each do |obj|
+          find_recursive_relationships(obj, child_inclusion_tree, results, options)
         end
       end
       nil
@@ -556,7 +557,7 @@ module JSONAPI
     def self.merge_relationship_path(path, data)
       parts = path.split('.', 2)
       current_level = parts[0].strip
-      data[current_level] ||= {_include: true}
+      data[current_level] ||= { _include: true }
 
       if parts.length == 2
         # Need to recurse more.
